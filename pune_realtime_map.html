@@ -1,0 +1,238 @@
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans,sans-serif);background:transparent}
+.top-bar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:10px 14px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.top-title{font-size:16px;font-weight:500;color:var(--color-text-primary);display:flex;align-items:center;gap:7px}
+.home-pill{font-size:11px;background:#FEE2E2;color:#991B1B;padding:4px 10px;border-radius:20px;display:flex;align-items:center;gap:4px}
+.filter-row{display:flex;gap:6px;padding:8px 14px;overflow-x:auto;border-bottom:0.5px solid var(--color-border-tertiary);scrollbar-width:none}
+.filter-row::-webkit-scrollbar{display:none}
+.fbtn{font-size:11px;padding:4px 12px;border-radius:20px;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-secondary);cursor:pointer;white-space:nowrap}
+.fbtn.on{color:#fff;border-color:transparent}
+.map-wrap{position:relative;height:400px}
+#map{width:100%;height:400px;z-index:1}
+.side-panel{position:absolute;top:8px;right:8px;width:210px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:10px;z-index:999;overflow:hidden;max-height:384px;display:flex;flex-direction:column}
+.sp-head{padding:8px 10px;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px;font-weight:500;color:var(--color-text-primary)}
+.sp-list{overflow-y:auto;flex:1}
+.sp-item{padding:7px 10px;border-bottom:0.5px solid var(--color-border-tertiary);cursor:pointer;display:flex;align-items:center;gap:7px;transition:background 0.1s}
+.sp-item:hover{background:var(--color-background-secondary)}
+.sp-item.active{background:var(--color-background-secondary)}
+.sp-num{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:500;color:#fff;flex-shrink:0}
+.sp-name{font-size:11px;color:var(--color-text-primary);line-height:1.3;flex:1}
+.sp-dist{font-size:10px;color:var(--color-text-secondary);white-space:nowrap}
+.info-bar{border-top:0.5px solid var(--color-border-tertiary);padding:10px 14px;display:none;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.info-bar.show{display:flex}
+.ib-name{font-size:14px;font-weight:500;color:var(--color-text-primary)}
+.ib-meta{font-size:11px;color:var(--color-text-secondary);margin-top:3px;display:flex;flex-wrap:wrap;gap:10px}
+.ib-tip{font-size:11px;color:var(--color-text-secondary);margin-top:5px;line-height:1.5}
+.ib-btn{margin-top:7px;font-size:11px;color:var(--color-text-info);border:0.5px solid var(--color-border-tertiary);padding:4px 10px;border-radius:6px;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+.ib-close{margin-left:auto;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:50%;width:22px;height:22px;font-size:13px;cursor:pointer;color:var(--color-text-primary);line-height:22px;text-align:center;flex-shrink:0}
+</style>
+
+<div class="top-bar">
+  <div class="top-title"><i class="ti ti-map-pin" aria-hidden="true"></i> Pune Trip Map</div>
+  <div class="home-pill"><i class="ti ti-home" aria-hidden="true"></i> Mantra Essence, Undri</div>
+</div>
+
+<div class="filter-row" id="filterRow">
+  <button class="fbtn on" style="background:#555" onclick="setFilter('all',this)">All 20</button>
+  <button class="fbtn" onclick="setFilter('history',this)">Forts & History</button>
+  <button class="fbtn" onclick="setFilter('nature',this)">Nature & Caves</button>
+  <button class="fbtn" onclick="setFilter('shopping',this)">Shopping</button>
+  <button class="fbtn" onclick="setFilter('streets',this)">Streets</button>
+  <button class="fbtn" onclick="setFilter('wellness',this)">Wellness</button>
+</div>
+
+<div class="map-wrap">
+  <div id="map"></div>
+  <div class="side-panel">
+    <div class="sp-head" id="spHead">All places (20)</div>
+    <div class="sp-list" id="spList"></div>
+  </div>
+</div>
+
+<div class="info-bar" id="infoBar">
+  <div style="flex:1;min-width:0">
+    <div class="ib-name" id="ibName"></div>
+    <div class="ib-meta" id="ibMeta"></div>
+    <div class="ib-tip" id="ibTip"></div>
+    <a class="ib-btn" id="ibDir" href="#" target="_blank"><i class="ti ti-navigation" aria-hidden="true"></i> Directions from Undri</a>
+  </div>
+  <button class="ib-close" onclick="closeInfo()">×</button>
+</div>
+
+<script>
+const ORIGIN_LAT=18.4459314, ORIGIN_LNG=73.912227;
+
+const CAT={
+  history:{color:'#534AB7',label:'Forts & History',fbg:'#534AB7'},
+  nature: {color:'#1D9E75',label:'Nature & Caves',fbg:'#1D9E75'},
+  shopping:{color:'#D4537E',label:'Shopping',fbg:'#D4537E'},
+  streets:{color:'#BA7517',label:'Streets',fbg:'#BA7517'},
+  wellness:{color:'#378ADD',label:'Wellness',fbg:'#378ADD'},
+};
+
+const places=[
+  {id:1, name:"Shaniwar Wada",       lat:18.5195841,lng:73.8554208,cat:'history', rating:4.3,hours:"6–10 AM & 4–7:30 PM",   tip:"Evening light & sound show is unmissable. Built by Peshwas 1732."},
+  {id:2, name:"Aga Khan Palace",      lat:18.5525887,lng:73.9015388,cat:'history', rating:4.5,hours:"9 AM – 5:30 PM",         tip:"Gandhi imprisoned here. Online tickets only. Allow 1.5 hrs."},
+  {id:3, name:"Phoenix Market City",  lat:18.562254, lng:73.9166943,cat:'shopping',rating:4.5,hours:"11 AM – 11 PM",          tip:"Pune's biggest mall — IKEA, PVR, 500+ brands."},
+  {id:4, name:"Sinhagad Fort",        lat:18.366277, lng:73.7558777,cat:'history', rating:4.6,hours:"6 AM – 6 PM",            tip:"Best at sunrise. Legendary Maratha fort. Stunning monsoon views."},
+  {id:5, name:"Karla Caves",          lat:18.7832875,lng:73.4704531,cat:'nature',  rating:4.4,hours:"9 AM – 5 PM",            tip:"2000-year-old Buddhist rock-cut caves near Lonavala."},
+  {id:6, name:"Bhaja Caves",          lat:18.7293775,lng:73.4813013,cat:'nature',  rating:4.4,hours:"9 AM – 6 PM",            tip:"2nd century BCE caves. Less crowded than Karla. Great trek up."},
+  {id:7, name:"Tikona Fort",          lat:18.631843, lng:73.5127503,cat:'history', rating:4.6,hours:"5 AM – 5 PM",            tip:"Triangular fort above Pawna Lake. Easy beginner trek, 1.5 hrs."},
+  {id:8, name:"Lohagad Fort",         lat:18.7101945,lng:73.4758618,cat:'history', rating:4.5,hours:"6 AM – 6 PM",            tip:"Near Lonavala. Walkable from Malavli station. Panoramic views."},
+  {id:9, name:"Rajgad Fort",          lat:18.2466334,lng:73.6822128,cat:'history', rating:4.8,hours:"Open 24 hrs",            tip:"Shivaji's capital for 26 yrs. Full day needed. Start at 4 AM."},
+  {id:10,name:"Koregaon Park",        lat:18.5362084,lng:73.8939748,cat:'streets', rating:4.4,hours:"Always open",            tip:"Upscale area. Best cafes, restaurants & boutiques in Pune."},
+  {id:11,name:"FC Road",              lat:18.5174965,lng:73.8416302,cat:'streets', rating:4.5,hours:"Evenings best",          tip:"College hub. Best street shopping & food. Evenings are buzzing."},
+  {id:12,name:"Osho Gardens",         lat:18.5360446,lng:73.8906885,cat:'wellness',rating:4.1,hours:"6–9 AM & 3–6 PM",        tip:"Japanese Zen garden. Free entry. Very peaceful, closes at 6 PM."},
+  {id:13,name:"Maval Agro Tourism",   lat:18.6903182,lng:73.5339873,cat:'nature',  rating:4.7,hours:"By booking",             tip:"Kayaking & boating on Pawna River. Star gazing at night."},
+  {id:14,name:"Savlya Ghat",          lat:18.4861786,lng:73.4032279,cat:'nature',  rating:4.8,hours:"Sunrise best",           tip:"Breathtaking viewpoint near Tamhini. Best in monsoon season."},
+  {id:15,name:"Amanora Mall",         lat:18.518534, lng:73.9350918,cat:'shopping',rating:4.4,hours:"11 AM – 10 PM",          tip:"Campus-style mall. Oasis courtyard. Opposite Seasons Mall."},
+  {id:16,name:"Seasons Mall",         lat:18.518712, lng:73.9317961,cat:'shopping',rating:4.4,hours:"10 AM – 11 PM",          tip:"Cinepolis multiplex & rooftop vibe. Right next to Amanora."},
+  {id:17,name:"Streets of Europe",    lat:18.5846271,lng:73.7303635,cat:'streets', rating:4.3,hours:"Open 24 hrs",            tip:"European-themed hangout in Hinjawadi. Great evenings with lights."},
+  {id:18,name:"Balewadi High Street", lat:18.5686574,lng:73.7752909,cat:'streets', rating:4.2,hours:"Evenings best",          tip:"Trendy Baner strip with pubs, cafes & restaurants."},
+  {id:19,name:"Tribeca High Street",  lat:18.476941, lng:73.9082244,cat:'streets', rating:4.6,hours:"11 AM – 9:30 PM",        tip:"Closest to Undri! Walking-street feel with great food."},
+  {id:20,name:"OSHO Ashram",          lat:18.5364096,lng:73.8882102,cat:'wellness',rating:4.2,hours:"6 AM – 11 PM",           tip:"International meditation resort. HIV test required for entry."},
+];
+
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return Math.round(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
+}
+places.forEach(p=>{p.dist=haversine(ORIGIN_LAT,ORIGIN_LNG,p.lat,p.lng);});
+
+let currentCat='all', activeId=null, markers={}, map;
+
+function initMap(){
+  map=L.map('map',{zoomControl:true}).setView([18.52,73.75],10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© OpenStreetMap contributors',
+    maxZoom:18
+  }).addTo(map);
+
+  const homeIcon=L.divIcon({
+    html:`<div style="width:28px;height:28px;background:#DC2626;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid white;display:flex;align-items:center;justify-content:center;">
+      <div style="transform:rotate(45deg);font-size:12px;line-height:1;margin-top:-1px;">🏠</div></div>`,
+    iconSize:[28,28],iconAnchor:[14,28],className:''
+  });
+  L.marker([ORIGIN_LAT,ORIGIN_LNG],{icon:homeIcon})
+    .addTo(map)
+    .bindPopup('<b>Home: Mantra Essence</b><br>Undri, Pune','',{maxWidth:160});
+
+  places.forEach((p,i)=>{
+    const col=CAT[p.cat].color;
+    const num=i+1;
+    const icon=L.divIcon({
+      html:`<div style="position:relative;display:flex;flex-direction:column;align-items:center;">
+        <div style="width:30px;height:30px;background:${col};border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid white;display:flex;align-items:center;justify-content:center;">
+          <span style="transform:rotate(45deg);font-size:10px;font-weight:700;color:white;line-height:1;">${num}</span>
+        </div>
+        <div style="background:${col};color:white;font-size:9px;font-weight:600;padding:2px 5px;border-radius:4px;margin-top:2px;white-space:nowrap;max-width:90px;overflow:hidden;text-overflow:ellipsis;line-height:1.3;border:1px solid white;">${p.name}</div>
+      </div>`,
+      iconSize:[90,52],iconAnchor:[15,32],className:''
+    });
+    const m=L.marker([p.lat,p.lng],{icon})
+      .addTo(map)
+      .bindPopup(
+        `<div style="min-width:150px"><b style="font-size:13px">${p.name}</b><br>
+        <span style="color:#666;font-size:11px">${p.dist} km from Undri</span><br>
+        <span style="font-size:11px">⭐ ${p.rating} &nbsp; 🕐 ${p.hours}</span><br>
+        <span style="font-size:11px;color:#444">${p.tip}</span><br>
+        <a href="https://www.google.com/maps/dir/Mantra+Essence+Undri+Pune/${encodeURIComponent(p.name+' Pune')}" target="_blank" style="font-size:11px;color:#1a73e8">📍 Get directions</a></div>`,
+        {maxWidth:200}
+      );
+    m.on('click',()=>selectPlace(p.id));
+    markers[p.id]=m;
+  });
+
+  renderList('all');
+}
+
+function renderList(cat){
+  const list=document.getElementById('spList');
+  const head=document.getElementById('spHead');
+  const visible=cat==='all'?places:places.filter(p=>p.cat===cat);
+  head.textContent=(cat==='all'?'All places':'Category')+` (${visible.length})`;
+  list.innerHTML='';
+  visible.sort((a,b)=>a.dist-b.dist).forEach((p,i)=>{
+    const col=CAT[p.cat].color;
+    const div=document.createElement('div');
+    div.className='sp-item'+(p.id===activeId?' active':'');
+    div.onclick=()=>selectPlace(p.id);
+    div.innerHTML=`
+      <div class="sp-num" style="background:${col}">${places.indexOf(p)+1}</div>
+      <div class="sp-name">${p.name}</div>
+      <div class="sp-dist">${p.dist}km</div>`;
+    list.appendChild(div);
+  });
+}
+
+function setFilter(cat,btn){
+  currentCat=cat;
+  document.querySelectorAll('.fbtn').forEach(b=>{
+    b.classList.remove('on');
+    b.style.background='';b.style.color='';b.style.borderColor='';
+  });
+  btn.classList.add('on');
+  const col=cat==='all'?'#555':CAT[cat]?.color||'#555';
+  btn.style.background=col;btn.style.color='#fff';btn.style.borderColor='transparent';
+
+  const visible=new Set(cat==='all'?places.map(p=>p.id):places.filter(p=>p.cat===cat).map(p=>p.id));
+  places.forEach(p=>{
+    if(markers[p.id]){
+      if(visible.has(p.id)){markers[p.id].addTo(map);}
+      else{markers[p.id].remove();}
+    }
+  });
+
+  if(cat!=='all'){
+    const fps=places.filter(p=>p.cat===cat);
+    if(fps.length){
+      const group=L.featureGroup(fps.map(p=>markers[p.id]).filter(Boolean));
+      map.fitBounds(group.getBounds().pad(0.2));
+    }
+  } else {
+    map.setView([18.52,73.75],10);
+  }
+  renderList(cat);
+}
+
+function selectPlace(id){
+  activeId=id;
+  const p=places.find(x=>x.id===id);
+  if(!p)return;
+  renderList(currentCat);
+
+  map.setView([p.lat,p.lng],14,{animate:true});
+  if(markers[id])markers[id].openPopup();
+
+  document.getElementById('ibName').textContent=p.name;
+  document.getElementById('ibMeta').innerHTML=`
+    <span><i class="ti ti-map-2" style="font-size:12px" aria-hidden="true"></i> ${p.dist} km from Undri</span>
+    <span>⭐ ${p.rating}</span>
+    <span style="background:${CAT[p.cat].color}22;color:${CAT[p.cat].color};padding:1px 7px;border-radius:10px;font-size:10px">${CAT[p.cat].label}</span>
+    <span><i class="ti ti-clock" style="font-size:12px" aria-hidden="true"></i> ${p.hours}</span>`;
+  document.getElementById('ibTip').textContent='💡 '+p.tip;
+  document.getElementById('ibDir').href=`https://www.google.com/maps/dir/Mantra+Essence+Undri+Pune/${encodeURIComponent(p.name+' Pune')}`;
+  document.getElementById('infoBar').classList.add('show');
+
+  const items=document.querySelectorAll('.sp-item');
+  const vis=currentCat==='all'?places:places.filter(x=>x.cat===currentCat);
+  vis.sort((a,b)=>a.dist-b.dist);
+  const idx=vis.findIndex(x=>x.id===id);
+  if(idx>=0&&items[idx])items[idx].scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+
+function closeInfo(){
+  activeId=null;
+  document.getElementById('infoBar').classList.remove('show');
+  renderList(currentCat);
+}
+
+window.addEventListener('load',initMap);
+if(document.readyState==='complete')initMap();
+</script>
